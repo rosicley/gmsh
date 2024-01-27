@@ -268,28 +268,44 @@ PView *GMSH_CrackPlugin::execute(PView *view)
         // joining the node to element barycenter is in the same direction as
         // the normal to all the connected crack elements, we consider the
         // element lies on the "positive side" of the crack
-        SVector3 dv = SVector3(it->first->point(), e->barycenter());
-        bool positive = true;
-        for(auto ce : it->second) {
-          SVector3 n;
-          if(dim == 1)
-            n = crossprod(normal1d, ce->getEdge(0).tangent());
-          else
-            n = ce->getFace(0).normal();
-          if(dot(n, dv) < 0) {
-            positive = false;
-            break;
+
+        // get the barycenter of the element connected to the crack
+        SPoint3 b = e->barycenter();
+
+        // get the vector joining the crack point and the barycenter of the
+        // current element
+        SVector3 dv = SVector3(it->first->point(), b);
+
+        // find the crack element closest to the barycenter of the element
+        double d = 1e200;
+        MElement *ce = nullptr;
+        for(auto ceAux : it->second) {
+          double d2 = b.distance(ceAux->barycenter());
+          if(d2 < d) {
+            d = d2;
+            ce = ceAux;
           }
         }
-        if(positive){
-          auto it2 = oneside.find(e);
-          if(it2 == oneside.end())
-            oneside[e] = {j};
-          else {
-            if(std::find(it2->second.begin(), it2->second.end(), j) ==
-               it2->second.end())
-              it2->second.push_back(j);
-          }
+
+        SVector3 n;
+        if(dim == 1)
+          n = crossprod(normal1d, ce->getEdge(0).tangent());
+        else
+          n = ce->getFace(0).normal();
+
+        // if the dot product between the normal and the vector joining the
+        // crack point and the barycenter is negative, the element is on the
+        // negative side of the crack
+        if(dot(n, dv) < 0)
+          continue;
+
+        auto it2 = oneside.find(e);
+        if(it2 == oneside.end())
+          oneside[e] = {j};
+        else {
+          if(std::find(it2->second.begin(), it2->second.end(), j) ==
+             it2->second.end())
+            it2->second.push_back(j);
         }
       }
     }
